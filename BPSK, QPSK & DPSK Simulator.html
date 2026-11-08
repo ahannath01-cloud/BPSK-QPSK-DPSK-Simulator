@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BPSK, QPSK &amp; DPSK Simulator</title>
+<style>
+:root {
+  --bg:#f7f7f5; --panel:#ffffff; --border:#dcdad3; --text:#1a1a1a; --sub:#5a5a55;
+  --accent:#185fa5; --good:#3b6d11; --bad:#a32d2d;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg:#17171a; --panel:#232326; --border:#3a3a3d; --text:#eee; --sub:#aaa;
+  --accent:#5aa4ec; --good:#97c459; --bad:#f09595; }
+}
+:root[data-theme="dark"] { --bg:#17171a; --panel:#232326; --border:#3a3a3d; --text:#eee; --sub:#aaa;
+  --accent:#5aa4ec; --good:#97c459; --bad:#f09595; }
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;}
+.wrap{max-width:980px;margin:0 auto;padding:1.5rem 1rem 3rem;}
+h1{font-size:1.3rem;margin:0 0 .25rem;}
+h2{font-size:1.05rem;margin:1.6rem 0 .5rem;color:var(--accent);}
+p.sub{color:var(--sub);margin:0 0 1rem;font-size:.9rem;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;}
+.row{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;margin-bottom:.5rem;}
+.field{display:flex;flex-direction:column;font-size:.8rem;color:var(--sub);gap:.25rem;}
+.field select,.field input[type=number]{padding:.35rem .4rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:130px;}
+.field input[type=range]{width:150px;}
+button{background:var(--accent);color:#fff;border:none;padding:.5rem .9rem;border-radius:6px;font-size:.85rem;cursor:pointer;}
+button.sec{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+.chartbox{position:relative;height:250px;margin:.5rem 0 1rem;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:.8rem;}
+@media(max-width:760px){.grid3,.grid2{grid-template-columns:1fr;}}
+.lbl{font-size:.78rem;color:var(--sub);margin:.2rem 0 -.2rem;text-align:center;}
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:.5rem;}
+th,td{border-bottom:1px solid var(--border);padding:.3rem .4rem;text-align:center;}
+th{color:var(--sub);font-weight:500;}
+td.ok{color:var(--good);font-weight:600;}
+td.no{color:var(--bad);font-weight:600;}
+tr.cur td{background:rgba(24,95,165,.10);}
+.pill{display:inline-block;padding:.15rem .55rem;border-radius:20px;font-size:.75rem;font-weight:600;margin-right:.3rem;}
+.pill.good{background:rgba(59,109,17,.15);color:var(--good);}
+.pill.bad{background:rgba(163,45,45,.15);color:var(--bad);}
+.note{font-size:.85rem;color:var(--sub);border-left:3px solid var(--accent);padding:.4rem .7rem;background:rgba(24,95,165,.06);border-radius:0 6px 6px 0;margin:.5rem 0;}
+.interp{font-size:.88rem;margin-top:.4rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Experiment 10 — BPSK, QPSK &amp; DPSK</h1>
+<p class="sub">Normalized baseband simulation (E<sub>s</sub> = 1 per symbol, complex AWGN). Coherent BPSK and Gray-coded QPSK assume zero carrier phase; DBPSK and DQPSK use differential encoding with differential detection. A carrier phase offset θ rotates the whole received constellation.</p>
+
+<div class="card">
+  <h2 style="margin-top:0">1 · Parameters</h2>
+  <div class="row">
+    <div class="field"><label>E<sub>b</sub>/N<sub>0</sub> (dB)</label><input id="snr" type="range" min="0" max="14" step="1" value="8"><span id="snrVal">8</span></div>
+    <div class="field"><label>Carrier phase offset θ (deg)</label><input id="theta" type="range" min="0" max="180" step="1" value="30"><span id="thetaVal">30</span></div>
+    <div class="field"><label>Symbols per BER point</label><input id="nsym" type="number" value="20000" min="2000" max="100000" step="2000"></div>
+  </div>
+  <div class="row">
+    <button class="sec" data-th="10">θ = 10°</button>
+    <button class="sec" data-th="30">θ = 30°</button>
+    <button class="sec" data-th="60">θ = 60°</button>
+    <button class="sec" data-th="90">θ = 90°</button>
+    <button class="sec" data-th="180">θ = 180°</button>
+    <button id="runAll">Run simulation</button>
+  </div>
+  <div class="note">Expected: a coherent receiver with no phase correction loses a factor cos θ in BPSK amplitude (QPSK: cos θ ± sin θ per axis), so BER rises with θ and reaches 50% at 90° (QPSK is already unusable at 45°, where the symbols reach the decision boundary). Differential detection compares each symbol with the previous one, so a constant phase offset cancels and BER stays at its θ = 0 value — at the price of roughly 1 dB (DBPSK) to 2–3 dB (DQPSK) more E<sub>b</sub>/N<sub>0</sub> because the reference itself is noisy.</div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">2 · Ideal and noisy constellations</h2>
+  <div class="grid3">
+    <div><div class="lbl">BPSK</div><div class="chartbox"><canvas id="chConB" role="img" aria-label="BPSK ideal and noisy rotated constellation">BPSK constellation.</canvas></div></div>
+    <div><div class="lbl">Gray QPSK</div><div class="chartbox"><canvas id="chConQ" role="img" aria-label="QPSK ideal and noisy rotated constellation">QPSK constellation.</canvas></div></div>
+    <div><div class="lbl">DQPSK (received)</div><div class="chartbox"><canvas id="chConD" role="img" aria-label="DQPSK received constellation with phase offset">DQPSK constellation.</canvas></div></div>
+  </div>
+  <div class="interp" id="conInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">3 · QPSK mapping, rotation and decisions</h2>
+  <div class="grid2">
+    <div><div class="chartbox"><canvas id="chMap" role="img" aria-label="Gray QPSK mapping with bit labels, and the same points rotated by the phase offset with the bits a coherent detector would decide">QPSK mapping.</canvas></div></div>
+    <div id="mapTable"></div>
+  </div>
+  <div class="interp" id="mapInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">4 · Phase trajectory</h2>
+  <div class="lbl">Coherent QPSK: transmitted phase vs received phase (θ and noise applied)</div>
+  <div class="chartbox"><canvas id="chPhQ" role="img" aria-label="Transmitted and received phase per symbol for QPSK">QPSK phase trajectory.</canvas></div>
+  <div class="lbl">DQPSK: transmitted phase increment vs measured increment arg(r<sub>k</sub>·r*<sub>k−1</sub>)</div>
+  <div class="chartbox"><canvas id="chPhD" role="img" aria-label="Transmitted and measured phase increments for DQPSK">DQPSK phase trajectory.</canvas></div>
+  <div class="interp" id="phInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">5 · Decision statistics</h2>
+  <div class="row">
+    <div class="field"><label>Detector statistic</label>
+      <select id="histSel">
+        <option value="bpsk">Coherent BPSK: Re{r}</option>
+        <option value="qpsk">Coherent QPSK: I-axis Re{r}</option>
+        <option value="dbpsk" selected>DBPSK: Re{r<sub>k</sub> r*<sub>k−1</sub>}</option>
+        <option value="dqpsk">DQPSK: arg(r<sub>k</sub> r*<sub>k−1</sub>) (deg)</option>
+      </select>
+    </div>
+  </div>
+  <div class="chartbox"><canvas id="chHist" role="img" aria-label="Histogram of the decision statistic conditioned on the transmitted data">Decision statistic histogram.</canvas></div>
+  <div class="interp" id="histInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">6 · BER comparison</h2>
+  <div class="lbl">BER vs E<sub>b</sub>/N<sub>0</sub> at the selected phase offset</div>
+  <div class="chartbox" style="height:270px"><canvas id="chBER" role="img" aria-label="BER versus Eb/N0 for coherent and differential PSK with theory at zero offset">BER vs SNR.</canvas></div>
+  <div class="interp" id="berInterp"></div>
+  <div class="lbl" style="margin-top:1rem">BER vs phase offset θ at the selected E<sub>b</sub>/N<sub>0</sub></div>
+  <div class="chartbox" style="height:270px"><canvas id="chOff" role="img" aria-label="BER versus carrier phase offset for BPSK, QPSK, DBPSK and DQPSK">BER vs phase offset.</canvas></div>
+  <div id="offTable"></div>
+  <div class="interp" id="offInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">7 · Mandatory validation — manual mapping and detector decisions</h2>
+  <p class="sub" style="margin-top:-.3rem">Mapper (Gray): b₀ sets the Q sign and b₁ sets the I sign, s = [(1−2b₁) + j(1−2b₀)]/√2. Demapper: b̂₀ = [Im r &lt; 0], b̂₁ = [Re r &lt; 0]. Noise-free symbols are rotated by each offset and demapped.</p>
+  <div id="valTable"></div>
+  <div class="interp" id="valInterp"></div>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const R2 = Math.SQRT1_2;               // 1/sqrt(2)
+const GRAYINC = [0,1,3,2];             // index b0*2+b1: 00->0, 01->1, 10->3, 11->2  (increment in units of 90 deg)
+const INCBITS = [[0,0],[0,1],[1,1],[1,0]]; // inverse: increment index -> [b0,b1]
+
+function isDark(){ return matchMedia('(prefers-color-scheme: dark)').matches; }
+const ink = () => isDark() ? '#eee' : '#1a1a1a';
+const gridc = () => isDark() ? '#3a3a3d' : '#e1e0d9';
+let charts = {};
+function upsertChart(id, config){ if(charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), config); }
+function baseOpts(xl, yl, o){
+  o = o || {};
+  const sc = { x:{ type:'linear', ticks:{color:ink()}, grid:{color:gridc()}, title:{display:true,text:xl,color:ink()} },
+               y:{ ticks:{color:ink()}, grid:{color:gridc()}, title:{display:true,text:yl,color:ink()} } };
+  if(o.xmin!==undefined){ sc.x.min=o.xmin; sc.x.max=o.xmax; }
+  if(o.ymin!==undefined){ sc.y.min=o.ymin; sc.y.max=o.ymax; }
+  if(o.ylog){ sc.y.type='logarithmic'; sc.y.min=o.ylogmin||1e-4; sc.y.max=1; }
+  return { responsive:true, maintainAspectRatio:false, animation:false, scales:sc,
+           plugins:{ legend:{ display:o.legend!==false, labels:{ color:ink(), boxWidth:10, font:{size:10} } } } };
+}
+const labelPlugin = { id:'ptlabels', afterDatasetsDraw(chart){
+  const ctx = chart.ctx;
+  chart.data.datasets.forEach((ds,i)=>{
+    if(!ds.ptLabels) return;
+    const meta = chart.getDatasetMeta(i);
+    meta.data.forEach((pt,j)=>{ ctx.save(); ctx.fillStyle = ds.labelColor || ink(); ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.fillText(ds.ptLabels[j], pt.x, pt.y + (ds.labelDy||-10)); ctx.restore(); });
+  });
+} };
+
+function gauss(){ let u=0; while(u===0) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random()); }
+function erfc(x){ const z=Math.abs(x), t=1/(1+0.5*z);
+  const r=t*Math.exp(-z*z-1.26551223+t*(1.00002368+t*(0.37409196+t*(0.09678418+t*(-0.18628806+t*(0.27886807+t*(-1.13520398+t*(1.48851587+t*(-0.82215223+t*0.17087277)))))))));
+  return x>=0 ? r : 2-r; }
+function Q(x){ return 0.5*erfc(x/Math.SQRT2); }
+function pts(xs, ys){ return xs.map((x,i)=>({x:x, y:ys[i]})); }
+function deg(r){ return r*180/Math.PI; }
+function wrapDeg(a){ let d=((a+180)%360+360)%360-180; return d; }
+
+// ---------- Mapper / demapper (single shared definition) ----------
+function mapQPSK(b0, b1){ return { re:(1-2*b1)*R2, im:(1-2*b0)*R2 }; }
+function demapQPSK(re, im){ return [ im<0?1:0, re<0?1:0 ]; }
+function mapBPSK(b){ return b ? -1 : 1; }
+
+// ---------- End-to-end links ----------
+// scheme: bpsk | qpsk | dbpsk | dqpsk. Returns BER and (optionally) the first keepN samples/statistics.
+function link(scheme, nSym, gdB, phi, keepN){
+  const gam = Math.pow(10, gdB/10);
+  const Eb = (scheme==='bpsk' || scheme==='dbpsk') ? 1 : 0.5;     // Es = 1
+  const sg = Math.sqrt(Eb/gam/2);                                   // per-dimension noise std (N0/2)
+  const cp = Math.cos(phi), sp = Math.sin(phi);
+  const K = { re:[], im:[], tre:[], tim:[], stat:[], cls:[], txph:[] };
+  let errs = 0, nb = 0;
+  const keep = (k)=> k < (keepN||0);
+  if(scheme==='bpsk'){
+    for(let k=0;k<nSym;k++){
+      const b = Math.random()<0.5?0:1, s = mapBPSK(b);
+      const rr = s*cp + sg*gauss(), ri = s*sp + sg*gauss();
+      if((rr<0?1:0)!==b) errs++; nb++;
+      if(keep(k)){ K.re.push(rr); K.im.push(ri); K.tre.push(s); K.tim.push(0); K.stat.push(rr); K.cls.push(b); K.txph.push(deg(Math.atan2(0,s))); }
+    }
+  } else if(scheme==='qpsk'){
+    for(let k=0;k<nSym;k++){
+      const b0 = Math.random()<0.5?0:1, b1 = Math.random()<0.5?0:1, s = mapQPSK(b0,b1);
+      const rr = s.re*cp - s.im*sp + sg*gauss(), ri = s.re*sp + s.im*cp + sg*gauss();
+      const d = demapQPSK(rr, ri);
+      if(d[0]!==b0) errs++; if(d[1]!==b1) errs++; nb += 2;
+      if(keep(k)){ K.re.push(rr); K.im.push(ri); K.tre.push(s.re); K.tim.push(s.im); K.stat.push(rr); K.cls.push(b1); K.txph.push(deg(Math.atan2(s.im,s.re))); }
+    }
+  } else if(scheme==='dbpsk'){
+    let dprev = 0, pr = cp + sg*gauss(), pi = sp + sg*gauss();       // reference symbol (d = 0 -> +1)
+    for(let k=0;k<nSym;k++){
+      const b = Math.random()<0.5?0:1; dprev ^= b;
+      const s = mapBPSK(dprev);
+      const rr = s*cp + sg*gauss(), ri = s*sp + sg*gauss();
+      const st = rr*pr + ri*pi;                                      // Re{ r_k * conj(r_{k-1}) }
+      if((st<0?1:0)!==b) errs++; nb++;
+      if(keep(k)){ K.re.push(rr); K.im.push(ri); K.tre.push(s); K.tim.push(0); K.stat.push(st); K.cls.push(b); K.txph.push(deg(Math.atan2(0,s))); }
+      pr = rr; pi = ri;
+    }
+  } else {
+    let ph = 0, a0 = Math.PI/4;
+    let pr = Math.cos(a0)*cp - Math.sin(a0)*sp + sg*gauss(), pi = Math.cos(a0)*sp + Math.sin(a0)*cp + sg*gauss();
+    for(let k=0;k<nSym;k++){
+      const b0 = Math.random()<0.5?0:1, b1 = Math.random()<0.5?0:1;
+      const inc = GRAYINC[b0*2+b1]; ph = (ph+inc)%4;
+      const ang = a0 + ph*Math.PI/2, sx = Math.cos(ang), sy = Math.sin(ang);
+      const rr = sx*cp - sy*sp + sg*gauss(), ri = sx*sp + sy*cp + sg*gauss();
+      const xr = rr*pr + ri*pi, xi = ri*pr - rr*pi;                  // r_k * conj(r_{k-1})
+      const am = Math.atan2(xi, xr);
+      const idx = ((Math.round(am/(Math.PI/2))%4)+4)%4, d = INCBITS[idx];
+      if(d[0]!==b0) errs++; if(d[1]!==b1) errs++; nb += 2;
+      if(keep(k)){ K.re.push(rr); K.im.push(ri); K.tre.push(sx); K.tim.push(sy); K.stat.push(am); K.cls.push(inc); K.txph.push(deg(ang)); }
+      pr = rr; pi = ri;
+    }
+  }
+  return { ber: errs/nb, errs:errs, nb:nb, keep:K };
+}
+
+// ---------- Parameters / UI ----------
+function getP(){ const th=+document.getElementById('theta').value;
+  return { snr:+document.getElementById('snr').value, thDeg:th, th:th*Math.PI/180, n:Math.max(2000, +document.getElementById('nsym').value||20000) }; }
+document.getElementById('snr').addEventListener('input', e=>{ document.getElementById('snrVal').textContent=e.target.value; });
+document.getElementById('theta').addEventListener('input', e=>{ document.getElementById('thetaVal').textContent=e.target.value; });
+document.querySelectorAll('button[data-th]').forEach(b=>{ b.onclick = ()=>{ document.getElementById('theta').value=b.getAttribute('data-th'); document.getElementById('thetaVal').textContent=b.getAttribute('data-th'); runAll(); }; });
+document.getElementById('histSel').addEventListener('change', ()=>{ plotHist(getP()); });
+
+// ---------- Section 2: constellations ----------
+function plotCon(p){
+  const defs = [
+    ['chConB','bpsk',[[1,0],[-1,0]],['0','1'],1.6],
+    ['chConQ','qpsk',[[R2,R2],[-R2,R2],[-R2,-R2],[R2,-R2]],['00','01','11','10'],1.2],
+    ['chConD','dqpsk',[[R2,R2],[-R2,R2],[-R2,-R2],[R2,-R2]],['','','',''],1.2]
+  ];
+  defs.forEach(d=>{
+    const l = link(d[1], 600, p.snr, p.th, 600), K = l.keep, lim = d[4];
+    upsertChart(d[0], { type:'scatter', data:{ datasets:[
+      {label:'Received (θ + noise)', data:pts(K.re,K.im), backgroundColor:'rgba(42,120,214,0.35)', pointRadius:2},
+      {label:'Ideal', data:pts(d[2].map(v=>v[0]), d[2].map(v=>v[1])), backgroundColor:'#e34948', pointRadius:5, ptLabels:d[3], labelDy:-10}
+    ]}, options: Object.assign(baseOpts('In-phase','Quadrature',{xmin:-lim,xmax:lim,ymin:-lim,ymax:lim}), {}), plugins:[labelPlugin] });
+  });
+  document.getElementById('conInterp').innerHTML = `<b>Observation:</b> with θ = ${p.thDeg}° and E<sub>b</sub>/N<sub>0</sub> = ${p.snr} dB the received clusters are the ideal points rotated by θ and blurred by noise. BPSK needs only a 180° rotation to flip every decision; QPSK points cross a decision boundary after 45°. DQPSK shows the same rotated cloud, but its detector uses the <em>change</em> of phase between symbols, which is unaffected by a constant rotation.`;
+}
+
+// ---------- Section 3: QPSK mapping ----------
+function plotMap(p){
+  const bits = [[0,0],[0,1],[1,1],[1,0]];
+  const ideal = bits.map(b=>mapQPSK(b[0],b[1]));
+  const cp=Math.cos(p.th), sp=Math.sin(p.th);
+  const rot = ideal.map(s=>({ re:s.re*cp - s.im*sp, im:s.re*sp + s.im*cp }));
+  const det = rot.map(s=>demapQPSK(s.re,s.im));
+  upsertChart('chMap', { type:'scatter', data:{ datasets:[
+    {label:'Q = 0 boundary', data:[{x:-1.1,y:0},{x:1.1,y:0}], showLine:true, borderColor:'#888780', borderDash:[4,3], borderWidth:1, pointRadius:0},
+    {label:'I = 0 boundary', data:[{x:0,y:-1.1},{x:0,y:1.1}], showLine:true, borderColor:'#b4b2a9', borderDash:[4,3], borderWidth:1, pointRadius:0},
+    {label:'Sent (Gray)', data:pts(ideal.map(s=>s.re), ideal.map(s=>s.im)), backgroundColor:'#2a78d6', pointRadius:6, ptLabels:bits.map(b=>b.join('')), labelDy:-11},
+    {label:`Rotated by ${p.thDeg}° → detected`, data:pts(rot.map(s=>s.re), rot.map(s=>s.im)), backgroundColor:'rgba(235,104,52,0.9)', pointRadius:5, ptLabels:det.map(d=>'→'+d.join('')), labelDy:16, labelColor:'#eb6834'}
+  ]}, options: baseOpts('In-phase','Quadrature',{xmin:-1.1,xmax:1.1,ymin:-1.1,ymax:1.1}), plugins:[labelPlugin] });
+  let rows = `<table><tr><th>bits b₀b₁</th><th>I = (1−2b₁)/√2</th><th>Q = (1−2b₀)/√2</th><th>phase</th></tr>`;
+  bits.forEach((b,i)=>{ rows += `<tr><td>${b.join('')}</td><td>${ideal[i].re>0?'+':'−'}0.707</td><td>${ideal[i].im>0?'+':'−'}0.707</td><td>${Math.round(deg(Math.atan2(ideal[i].im,ideal[i].re))+360)%360}°</td></tr>`; });
+  rows += `</table>`;
+  document.getElementById('mapTable').innerHTML = rows;
+  const wrong = det.filter((d,i)=>d[0]!==bits[i][0] || d[1]!==bits[i][1]).length;
+  document.getElementById('mapInterp').innerHTML = `<b>Observation:</b> neighbouring phases differ in exactly one bit (00→01→11→10→00), so a noise-induced move to an adjacent decision region costs one bit error, not two. At θ = ${p.thDeg}° the noise-free rotated points are decoded as shown in orange: ${wrong===0 ? 'all four still map to the correct bits (θ < 45°).' : wrong + ' of 4 symbols are already decoded wrongly (θ beyond the 45° decision boundary)' + (Math.abs(p.thDeg-90)<0.5 ? '; at exactly 90° each symbol lands on its Gray neighbour, giving exactly one wrong bit per symbol, i.e. BER = 50%.' : '.')}`;
+}
+
+// ---------- Section 4: phase trajectory ----------
+function plotPhase(p){
+  const N = 40, xs = Array.from({length:N},(_,i)=>i+1);
+  const lq = link('qpsk', N, p.snr, p.th, N).keep;
+  const rxq = lq.re.map((r,i)=>wrapDeg(deg(Math.atan2(lq.im[i], r))));
+  upsertChart('chPhQ', { type:'line', data:{ datasets:[
+    {label:'Transmitted phase', data:pts(xs, lq.txph.map(wrapDeg)), borderColor:'#2a78d6', borderWidth:1.2, stepped:true, pointRadius:0},
+    {label:`Received phase (θ = ${p.thDeg}°, noise)`, data:pts(xs,rxq), borderColor:'#eb6834', backgroundColor:'#eb6834', showLine:false, pointRadius:3}
+  ]}, options: baseOpts('symbol index','phase (deg)',{ymin:-180,ymax:180}) });
+  const ld = link('dqpsk', N, p.snr, p.th, N).keep;
+  const inc = [], meas = [];
+  for(let k=0;k<N;k++){ const prev = k===0 ? 0 : ld.txph[k-1]; inc.push(wrapDeg(ld.txph[k]-(k===0?45:prev))); meas.push(wrapDeg(deg(ld.stat[k]))); }
+  upsertChart('chPhD', { type:'line', data:{ datasets:[
+    {label:'Transmitted phase increment', data:pts(xs,inc), borderColor:'#2a78d6', borderWidth:1.2, stepped:true, pointRadius:0},
+    {label:'Measured increment arg(r_k·r*_{k−1})', data:pts(xs,meas), borderColor:'#1baf7a', backgroundColor:'#1baf7a', showLine:false, pointRadius:3}
+  ]}, options: baseOpts('symbol index','phase increment (deg)',{ymin:-180,ymax:180}) });
+  const off = deg(Math.atan2(Math.sin(p.th), Math.cos(p.th)));
+  document.getElementById('phInterp').innerHTML = `<b>Observation:</b> coherent QPSK received phase sits a constant ${p.thDeg}° above the transmitted phase (plus noise scatter), so a fixed rotation is a systematic error that eventually crosses the 45° boundary. The DQPSK measured increments track the transmitted increments with <em>no</em> ${p.thDeg}° bias, because the rotation appears in both r<sub>k</sub> and r<sub>k−1</sub> and cancels in the product.`;
+}
+
+// ---------- Section 5: decision statistics ----------
+function plotHist(p){
+  const sel = document.getElementById('histSel').value;
+  const l = link(sel, p.n, p.snr, p.th, p.n);
+  let stat = l.keep.stat, cls = l.keep.cls, xl = 'decision statistic', nCls = 2, names = ['bit 0','bit 1'];
+  if(sel==='dqpsk'){ stat = stat.map(a=>deg(a)); nCls = 4; names = ['Δ = 0° (00)','Δ = 90° (01)','Δ = 180° (11)','Δ = 270° (10)']; xl = 'measured phase increment (deg)'; }
+  else if(sel==='bpsk') xl = 'Re{r}'; else if(sel==='qpsk'){ xl = 'Re{r} (I axis carries b₁)'; names = ['b₁ = 0','b₁ = 1']; }
+  else xl = 'Re{r_k · r*_{k−1}}';
+  let lo = Math.min.apply(null, stat), hi = Math.max.apply(null, stat); if(sel==='dqpsk'){ lo=-180; hi=180; }
+  const bins = sel==='dqpsk' ? 72 : 50, w = (hi-lo)/bins;
+  const H = Array.from({length:nCls}, ()=>new Array(bins).fill(0)), S = Array.from({length:nCls}, ()=>[]);
+  for(let i=0;i<stat.length;i++){ const b = Math.max(0, Math.min(bins-1, Math.floor((stat[i]-lo)/w))); H[cls[i]][b]++; S[cls[i]].push(stat[i]); }
+  const xs = H[0].map((_,i)=>lo+(i+0.5)*w);
+  const cols = ['#eb6834','#2a78d6','#1baf7a','#6250d6'];
+  upsertChart('chHist', { type:'line', data:{ datasets: H.map((h,i)=>({label:names[i], data:pts(xs,h), borderColor:cols[i], backgroundColor:cols[i]+'44', fill:'origin', borderWidth:1.2, pointRadius:0, stepped:'middle'})) },
+    options: baseOpts(xl,'count') });
+  const mean = a=>a.reduce((x,y)=>x+y,0)/Math.max(a.length,1), sd = a=>{ const m=mean(a); return Math.sqrt(a.reduce((x,y)=>x+(y-m)*(y-m),0)/Math.max(a.length,1)); };
+  const stats = S.map((a,i)=>`${names[i]}: mean ${mean(a).toFixed(2)}, σ ${sd(a).toFixed(2)}`).join(' &nbsp;|&nbsp; ');
+  let txt = `<b>Observation (θ = ${p.thDeg}°, E<sub>b</sub>/N<sub>0</sub> = ${p.snr} dB, BER = ${l.ber.toExponential(2)}):</b> ${stats}. `;
+  if(sel==='bpsk' || sel==='qpsk') txt += `The two clusters are Gaussian, centred at ± ${(sel==='bpsk'?1:R2).toFixed(2)}·cos θ-type values — the offset shrinks the separation (cos θ = ${Math.cos(p.th).toFixed(2)}) without changing the noise spread, so the overlap and BER grow with θ.`;
+  else if(sel==='dbpsk') txt += `The statistic is a product of two noisy samples, so its clusters are wider and skewed (noise × noise term) than the coherent ones — the source of the DBPSK penalty — but their positions do not move when θ changes.`;
+  else txt += `Four clusters sit at the transmitted increments 0°, 90°, 180°, 270° (wrapping at ±180°) regardless of θ; errors occur only when noise pushes a measurement past a ±45° boundary.`;
+  document.getElementById('histInterp').innerHTML = txt;
+}
+
+// ---------- Section 6: BER ----------
+function clean(a){ return a.map(v=> v>0 ? v : null); }
+function plotBER(p){
+  const snrs=[0,2,4,6,8,10,12], n=p.n, names=['bpsk','qpsk','dbpsk','dqpsk'], r={bpsk:[],qpsk:[],dbpsk:[],dqpsk:[]};
+  snrs.forEach(s=>{ names.forEach(k=>{ r[k].push(link(k,n,s,p.th,0).ber); }); });
+  const g=[]; for(let s=0;s<=12.01;s+=0.5) g.push(s);
+  const th = g.map(s=>Q(Math.sqrt(2*Math.pow(10,s/10)))), thd = g.map(s=>0.5*Math.exp(-Math.pow(10,s/10)));
+  const ds=(label,k,col,dash)=>({label:label,data:pts(snrs,clean(r[k])),borderColor:col,backgroundColor:col,borderWidth:1.6,borderDash:dash||[],pointRadius:3,spanGaps:false});
+  upsertChart('chBER', { type:'line', data:{ datasets:[
+    ds('Coherent BPSK','bpsk','#2a78d6'), ds('Coherent Gray QPSK','qpsk','#85b7eb',[5,3]), ds('DBPSK','dbpsk','#eb6834'), ds('DQPSK','dqpsk','#e34948',[5,3]),
+    {label:'Theory coherent, θ=0: Q(√(2Eb/N0))', data:pts(g,th), borderColor:'#888780', borderWidth:1.2, pointRadius:0},
+    {label:'Theory DBPSK: ½exp(−Eb/N0)', data:pts(g,thd), borderColor:'#888780', borderWidth:1.2, borderDash:[2,3], pointRadius:0}
+  ]}, options: baseOpts('Eb/N0 (dB)','BER',{ylog:true,ylogmin:1e-4,xmin:0,xmax:12}) });
+  const i8 = snrs.indexOf(8);
+  document.getElementById('berInterp').innerHTML = `<b>Observation (θ = ${p.thDeg}°):</b> at 8 dB: coherent BPSK ${r.bpsk[i8].toExponential(1)}, coherent QPSK ${r.qpsk[i8].toExponential(1)}, DBPSK ${r.dbpsk[i8].toExponential(1)}, DQPSK ${r.dqpsk[i8].toExponential(1)}; zero-offset theory gives Q(√(2·6.31)) = ${Q(Math.sqrt(2*Math.pow(10,0.8))).toExponential(1)} (coherent) and ½e<sup>−6.31</sup> = ${(0.5*Math.exp(-Math.pow(10,0.8))).toExponential(1)} (DBPSK). `+
+    (p.thDeg===0 ? 'At θ = 0 coherent BPSK and Gray QPSK coincide (QPSK is two independent BPSK streams at the same E<sub>b</sub>), and the differential schemes sit to the right of them by about 1 dB (DBPSK) and 2–3 dB (DQPSK).' : 'With θ ≠ 0 the coherent curves move away from theory (right and up), while the differential curves are the same as at θ = 0 — the numerical signature of phase-offset immunity. Points with zero errors are omitted on the log axis.');
+}
+function plotOffset(p){
+  const offs=[0,10,20,30,45,60,75,90,120,150,180], n=p.n, names=['bpsk','qpsk','dbpsk','dqpsk'], r={bpsk:[],qpsk:[],dbpsk:[],dqpsk:[]};
+  offs.forEach(o=>{ names.forEach(k=>{ r[k].push(link(k,n,p.snr,o*Math.PI/180,0).ber); }); });
+  const gam = Math.pow(10,p.snr/10), a = Math.sqrt(2*gam);
+  const tB = offs.map(o=>{ const f=o*Math.PI/180; return Q(a*Math.cos(f)); });
+  const tQ = offs.map(o=>{ const f=o*Math.PI/180; return 0.5*(Q(a*(Math.cos(f)-Math.sin(f))) + Q(a*(Math.cos(f)+Math.sin(f)))); });
+  const ds=(label,arr,col,dash)=>({label:label,data:pts(offs,arr),borderColor:col,backgroundColor:col,borderWidth:1.6,borderDash:dash||[],pointRadius:3});
+  upsertChart('chOff', { type:'line', data:{ datasets:[
+    ds('Coherent BPSK', r.bpsk, '#2a78d6'), ds('Coherent Gray QPSK', r.qpsk, '#85b7eb', [5,3]), ds('DBPSK', r.dbpsk, '#eb6834'), ds('DQPSK', r.dqpsk, '#e34948', [5,3]),
+    {label:'Theory BPSK: Q(√(2γ)cos θ)', data:pts(offs,tB), borderColor:'#888780', borderWidth:1.1, pointRadius:0},
+    {label:'Theory QPSK (per axis)', data:pts(offs,tQ), borderColor:'#888780', borderWidth:1.1, borderDash:[2,3], pointRadius:0}
+  ]}, options: baseOpts('phase offset θ (deg)','BER',{xmin:0,xmax:180,ymin:0,ymax:1}) });
+  const req=[0,10,30,60,90,180];
+  let rows = `<table><tr><th>θ</th><th>Coherent BPSK</th><th>theory</th><th>Coherent QPSK</th><th>theory</th><th>DBPSK</th><th>DQPSK</th></tr>`;
+  req.forEach(o=>{ const i=offs.indexOf(o); rows += `<tr class="${Math.abs(o-p.thDeg)<0.5?'cur':''}"><td>${o}°</td><td>${r.bpsk[i].toFixed(4)}</td><td>${tB[i].toFixed(4)}</td><td>${r.qpsk[i].toFixed(4)}</td><td>${tQ[i].toFixed(4)}</td><td>${r.dbpsk[i].toFixed(4)}</td><td>${r.dqpsk[i].toFixed(4)}</td></tr>`; });
+  rows += `</table>`;
+  document.getElementById('offTable').innerHTML = rows;
+  const i90=offs.indexOf(90), i180=offs.indexOf(180);
+  document.getElementById('offInterp').innerHTML = `<b>Observation (E<sub>b</sub>/N<sub>0</sub> = ${p.snr} dB):</b> coherent BPSK BER climbs smoothly to ≈ ${r.bpsk[i90].toFixed(2)} at 90° and to ≈ ${r.bpsk[i180].toFixed(2)} at 180° (every bit inverted: the BPSK phase ambiguity). Coherent QPSK reaches ≈ ${r.qpsk[i90].toFixed(2)} at 90° (one wrong bit per symbol), then returns to a high error rate at 180° — rotation by a multiple of 90° is the QPSK ambiguity. DBPSK stays near ${r.dbpsk[0].toFixed(4)} and DQPSK near ${r.dqpsk[0].toFixed(4)} for every θ, confirming that differential detection is blind to a constant offset. Diagnostic for any gap between simulation and theory: compare with the theory columns above (agreement within Monte-Carlo noise ≈ ±√(BER/N) means the mapper, noise scaling and demapper are consistent).`;
+}
+
+// ---------- Section 7: mandatory validation ----------
+function plotVal(p){
+  const bits=[[0,0],[0,1],[1,1],[1,0]], offs=[0,10,30,60,90];
+  let all0 = true;
+  let rows = `<table><tr><th>bits</th><th>manual (I, Q) signs</th><th>manual phase</th>`;
+  offs.forEach(o=>{ rows += `<th>decision at θ = ${o}°</th>`; });
+  rows += `</tr>`;
+  const manual = {'00':['+','+',45], '01':['−','+',135], '11':['−','−',225], '10':['+','−',315]};
+  bits.forEach(b=>{
+    const key=b.join(''), m=manual[key], s=mapQPSK(b[0],b[1]);
+    const matchManual = ((s.re>0?'+':'−')===m[0]) && ((s.im>0?'+':'−')===m[1]);
+    rows += `<tr><td>${key}</td><td class="${matchManual?'ok':'no'}">(${m[0]}, ${m[1]}) ${matchManual?'✓':'✗'}</td><td>${m[2]}°</td>`;
+    offs.forEach(o=>{
+      const f=o*Math.PI/180, rr=s.re*Math.cos(f)-s.im*Math.sin(f), ri=s.re*Math.sin(f)+s.im*Math.cos(f), d=demapQPSK(rr,ri), ok=(d[0]===b[0]&&d[1]===b[1]);
+      if(o===0 && !ok) all0=false;
+      rows += `<td class="${ok?'ok':'no'}">${d.join('')} ${ok?'✓':'✗'}</td>`;
+    });
+    rows += `</tr>`;
+  });
+  rows += `</table>`;
+  // differential check: encode a sequence, rotate by theta, decode
+  const seq=[[0,0],[0,1],[1,1],[1,0],[1,1],[0,1]];
+  let ph=0; const a0=Math.PI/4, sy=[{re:Math.cos(a0),im:Math.sin(a0)}];
+  seq.forEach(b=>{ ph=(ph+GRAYINC[b[0]*2+b[1]])%4; const an=a0+ph*Math.PI/2; sy.push({re:Math.cos(an),im:Math.sin(an)}); });
+  let diffOk = true; const f=p.th, cf=Math.cos(f), sf=Math.sin(f), dec=[];
+  const rot = sy.map(s=>({re:s.re*cf-s.im*sf, im:s.re*sf+s.im*cf}));
+  for(let k=1;k<rot.length;k++){
+    const xr=rot[k].re*rot[k-1].re+rot[k].im*rot[k-1].im, xi=rot[k].im*rot[k-1].re-rot[k].re*rot[k-1].im;
+    const idx=((Math.round(Math.atan2(xi,xr)/(Math.PI/2))%4)+4)%4, d=INCBITS[idx]; dec.push(d.join(''));
+    if(d[0]!==seq[k-1][0]||d[1]!==seq[k-1][1]) diffOk=false;
+  }
+  document.getElementById('valTable').innerHTML = rows;
+  document.getElementById('valInterp').innerHTML = `<span class="pill ${all0?'good':'bad'}">${all0?'All four pairs 00, 01, 11, 10 decode correctly at θ = 0':'Mapper/demapper mismatch at θ = 0'}</span>`+
+    `<span class="pill ${diffOk?'good':'bad'}">DQPSK: sent ${seq.map(b=>b.join('')).join(' ')} → decoded ${dec.join(' ')} at θ = ${p.thDeg}° ${diffOk?'(identical)':'(mismatch)'}</span><br>`+
+    `<b>Observation:</b> the coherent decisions are correct for 0°, 10° and 30° (inside the 45° half-width of a QPSK decision region) and wrong at 60° and 90° — at 90° every pair is decoded as its Gray neighbour (00→01, 01→11, 11→10, 10→00), exactly one bit wrong per symbol. The differential detector reproduces the whole sent sequence at any offset because the rotation cancels in r<sub>k</sub>·r*<sub>k−1</sub>; the only extra cost is its higher noise sensitivity.`;
+}
+
+function runAll(){
+  const p = getP();
+  plotCon(p); plotMap(p); plotPhase(p); plotHist(p); plotBER(p); plotOffset(p); plotVal(p);
+}
+document.getElementById('runAll').onclick = runAll;
+runAll();
+</script>
+</body>
+</html>
